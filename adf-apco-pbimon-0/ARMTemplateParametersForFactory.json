@@ -1,0 +1,21 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "adf-apco-pbimon-0"
+		},
+		"ls_azure_sql_db_properties_typeProperties_connectionString_secretName": {
+			"value": "secret-pbimon-db-connection-string"
+		},
+		"ls_blob_properties_typeProperties_connectionString_secretName": {
+			"value": "secret-pbimon-storage-connection-string"
+		},
+		"ls_function_properties_typeProperties_functionAppUrl": {
+			"value": "https://func-apco-pbimon-0.azurewebsites.net"
+		},
+		"ls_kv_properties_typeProperties_baseUrl": {
+			"value": "https://kv-apco-pbimon-0.vault.azure.net/"
+		}
+	}
+}

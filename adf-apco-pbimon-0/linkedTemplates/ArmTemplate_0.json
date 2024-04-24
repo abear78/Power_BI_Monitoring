@@ -1,0 +1,1396 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "adf-apco-pbimon-0"
+		},
+		"ls_kv_properties_typeProperties_baseUrl": {
+			"type": "string",
+			"defaultValue": "https://kv-apco-pbimon-0.vault.azure.net/"
+		},
+		"ls_azure_sql_db_properties_typeProperties_connectionString_secretName": {
+			"type": "string",
+			"defaultValue": "secret-pbimon-db-connection-string"
+		},
+		"ls_blob_properties_typeProperties_connectionString_secretName": {
+			"type": "string",
+			"defaultValue": "secret-pbimon-storage-connection-string"
+		},
+		"ls_function_properties_typeProperties_functionAppUrl": {
+			"type": "string",
+			"defaultValue": "https://func-apco-pbimon-0.azurewebsites.net"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_kv')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureKeyVault",
+				"typeProperties": {
+					"baseUrl": "[parameters('ls_kv_properties_typeProperties_baseUrl')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_azure_sql_db')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlDatabase",
+				"typeProperties": {
+					"connectionString": {
+						"type": "AzureKeyVaultSecret",
+						"store": {
+							"referenceName": "ls_kv",
+							"type": "LinkedServiceReference"
+						},
+						"secretName": "[parameters('ls_azure_sql_db_properties_typeProperties_connectionString_secretName')]"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_kv')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_blob')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobStorage",
+				"typeProperties": {
+					"connectionString": {
+						"type": "AzureKeyVaultSecret",
+						"store": {
+							"referenceName": "ls_kv",
+							"type": "LinkedServiceReference"
+						},
+						"secretName": "[parameters('ls_blob_properties_typeProperties_connectionString_secretName')]"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_kv')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_function')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureFunction",
+				"typeProperties": {
+					"functionAppUrl": "[parameters('ls_function_properties_typeProperties_functionAppUrl')]",
+					"functionKey": {
+						"type": "AzureKeyVaultSecret",
+						"store": {
+							"referenceName": "ls_kv",
+							"type": "LinkedServiceReference"
+						},
+						"secretName": "secret-pbimon-func-app-secret"
+					},
+					"authentication": "Anonymous"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_kv')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_csv')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_blob",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobStorageLocation",
+						"container": "staging"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\"",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "reportId",
+						"type": "String"
+					},
+					{
+						"name": "reportName",
+						"type": "String"
+					},
+					{
+						"name": "identifier",
+						"type": "String"
+					},
+					{
+						"name": "reportUserAccessRight",
+						"type": "String"
+					},
+					{
+						"name": "displayName",
+						"type": "String"
+					},
+					{
+						"name": "principalType",
+						"type": "String"
+					},
+					{
+						"name": "mail",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_blob')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_sqldb')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_azure_sql_db",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_SchemaName": {
+						"type": "string"
+					},
+					"p_TableName": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [],
+				"typeProperties": {
+					"schema": {
+						"value": "@dataset().p_SchemaName",
+						"type": "Expression"
+					},
+					"table": {
+						"value": "@dataset().p_TableName",
+						"type": "Expression"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_azure_sql_db')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Load Graph API Groups Function')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Load Silver",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [
+							{
+								"activity": "From Blob to DB",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "00:30:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[silver].[sp_graph_groups]"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_azure_sql_db",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "From Blob to DB",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Get Graph Groups",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobStorageReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": {
+										"value": "@concat(pipeline().parameters.loadName, '/', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+										"type": "Expression"
+									},
+									"wildcardFileName": {
+										"value": "@concat(pipeline().parameters.loadName, '.csv')",
+										"type": "Expression"
+									},
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "DROP TABLE [bronze].[graph_groups];",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"tableOption": "autoCreate",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_csv",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "ds_sqldb",
+								"type": "DatasetReference",
+								"parameters": {
+									"p_SchemaName": "bronze",
+									"p_TableName": "graph_groups"
+								}
+							}
+						]
+					},
+					{
+						"name": "Get Graph Groups",
+						"type": "AzureFunctionActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"functionName": "get_graph_groups",
+							"headers": {},
+							"method": "GET"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_function",
+							"type": "LinkedServiceReference"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"loadName": {
+						"type": "string",
+						"defaultValue": "graphgroups"
+					}
+				},
+				"folder": {
+					"name": "Power BI Monitoring/Graph API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-11-16T08:20:53Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_azure_sql_db')]",
+				"[concat(variables('factoryId'), '/datasets/ds_csv')]",
+				"[concat(variables('factoryId'), '/datasets/ds_sqldb')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_function')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Load Graph API Users Function')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Load Silver",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [
+							{
+								"activity": "From Blob to DB",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "00:30:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[silver].[sp_graph_users]"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_azure_sql_db",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "From Blob to DB",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Get Graph Users",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobStorageReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": {
+										"value": "@concat(pipeline().parameters.loadName, '/', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+										"type": "Expression"
+									},
+									"wildcardFileName": {
+										"value": "@concat(pipeline().parameters.loadName, '.csv')",
+										"type": "Expression"
+									},
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "DROP TABLE [bronze].[graph_users];",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"tableOption": "autoCreate",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_csv",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "ds_sqldb",
+								"type": "DatasetReference",
+								"parameters": {
+									"p_SchemaName": "bronze",
+									"p_TableName": "graph_users"
+								}
+							}
+						]
+					},
+					{
+						"name": "Get Graph Users",
+						"type": "AzureFunctionActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"functionName": "get_graph_users",
+							"headers": {},
+							"method": "GET"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_function",
+							"type": "LinkedServiceReference"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {
+						"duration": "0.01:00:00"
+					}
+				},
+				"parameters": {
+					"loadName": {
+						"type": "string",
+						"defaultValue": "graphusers"
+					}
+				},
+				"folder": {
+					"name": "Power BI Monitoring/Graph API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-11-16T08:20:53Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_azure_sql_db')]",
+				"[concat(variables('factoryId'), '/datasets/ds_csv')]",
+				"[concat(variables('factoryId'), '/datasets/ds_sqldb')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_function')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Load Power BI API Activity Events Function')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Load Silver",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [
+							{
+								"activity": "From Blob to DB",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "00:30:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[silver].[sp_activity_events]"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_azure_sql_db",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "Get Activity Events",
+						"type": "AzureFunctionActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"functionName": "get_activity_events",
+							"headers": {},
+							"method": "GET"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_function",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "From Blob to DB",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Get Activity Events",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobStorageReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": {
+										"value": "@concat(pipeline().parameters.loadName, '/', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+										"type": "Expression"
+									},
+									"wildcardFileName": {
+										"value": "@concat(pipeline().parameters.loadName, '.csv')",
+										"type": "Expression"
+									},
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "DROP TABLE bronze.activity_events",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"tableOption": "autoCreate",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_csv",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "ds_sqldb",
+								"type": "DatasetReference",
+								"parameters": {
+									"p_SchemaName": "bronze",
+									"p_TableName": "activity_events"
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {
+						"duration": "0.01:00:00"
+					}
+				},
+				"parameters": {
+					"loadName": {
+						"type": "string",
+						"defaultValue": "activityevents"
+					}
+				},
+				"variables": {
+					"v_StartDateTime": {
+						"type": "String"
+					},
+					"v_EndDateTime": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Power BI Monitoring/Power BI API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-11-30T08:13:31Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_azure_sql_db')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_function')]",
+				"[concat(variables('factoryId'), '/datasets/ds_csv')]",
+				"[concat(variables('factoryId'), '/datasets/ds_sqldb')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Load Power BI API Reports Function')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Load Silver",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [
+							{
+								"activity": "From Blob to DB",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "00:30:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[silver].[sp_reports]"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_azure_sql_db",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "Get Reports",
+						"type": "AzureFunctionActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"functionName": "get_reports",
+							"headers": {},
+							"method": "GET"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_function",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "From Blob to DB",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Get Reports",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobStorageReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": {
+										"value": "@concat(pipeline().parameters.loadName, '/', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+										"type": "Expression"
+									},
+									"wildcardFileName": {
+										"value": "@concat(pipeline().parameters.loadName, '.csv')",
+										"type": "Expression"
+									},
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "DROP TABLE [bronze].[reports];",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"tableOption": "autoCreate",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_csv",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "ds_sqldb",
+								"type": "DatasetReference",
+								"parameters": {
+									"p_SchemaName": "bronze",
+									"p_TableName": "reports"
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {
+						"duration": "0.01:00:00"
+					}
+				},
+				"parameters": {
+					"loadName": {
+						"type": "string",
+						"defaultValue": "reports"
+					}
+				},
+				"folder": {
+					"name": "Power BI Monitoring/Power BI API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-11-16T08:20:53Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_azure_sql_db')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_function')]",
+				"[concat(variables('factoryId'), '/datasets/ds_csv')]",
+				"[concat(variables('factoryId'), '/datasets/ds_sqldb')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Load Power BI API Workspaces Function')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Load Silver",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [
+							{
+								"activity": "From Blob to DB",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "00:30:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[silver].[sp_workspaces]"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_azure_sql_db",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "Get Workspaces",
+						"type": "AzureFunctionActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"functionName": "get_workspaces",
+							"headers": {},
+							"method": "GET"
+						},
+						"linkedServiceName": {
+							"referenceName": "ls_function",
+							"type": "LinkedServiceReference"
+						}
+					},
+					{
+						"name": "From Blob to DB",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Get Workspaces",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobStorageReadSettings",
+									"recursive": true,
+									"wildcardFolderPath": {
+										"value": "@concat(pipeline().parameters.loadName, '/', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+										"type": "Expression"
+									},
+									"wildcardFileName": {
+										"value": "@concat(pipeline().parameters.loadName, '.csv')",
+										"type": "Expression"
+									},
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "DROP TABLE bronze.workspaces",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"tableOption": "autoCreate",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_csv",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "ds_sqldb",
+								"type": "DatasetReference",
+								"parameters": {
+									"p_SchemaName": "bronze",
+									"p_TableName": "workspaces"
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {
+						"duration": "0.01:00:00"
+					}
+				},
+				"parameters": {
+					"loadName": {
+						"type": "string",
+						"defaultValue": "workspaces"
+					}
+				},
+				"folder": {
+					"name": "Power BI Monitoring/Power BI API"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-11-16T08:20:53Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_azure_sql_db')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_function')]",
+				"[concat(variables('factoryId'), '/datasets/ds_csv')]",
+				"[concat(variables('factoryId'), '/datasets/ds_sqldb')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Load Reporting Dimensions Function')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get Config From config Table",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "00:10:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": "SELECT\n\tprocedure_name\nFROM\n\t[config].[stored_procedures]\nWHERE\n\tprocedure_type = 'REPORTING DIMENSION'\n\tAND is_active = 1",
+								"queryTimeout": "00:01:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_sqldb",
+								"type": "DatasetReference",
+								"parameters": {
+									"p_SchemaName": "n/a",
+									"p_TableName": "n/a"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "For Each Procedure",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get Config From config Table",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get Config From config Table').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Execute Procedure",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "00:30:00",
+										"retry": 2,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": {
+											"value": "@item().procedure_name",
+											"type": "Expression"
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "ls_azure_sql_db",
+										"type": "LinkedServiceReference"
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"folder": {
+					"name": "Power BI Monitoring/Stored procedures"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-11-14T11:32:09Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_sqldb')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_azure_sql_db')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Load Reporting Facts Function')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get Config From Config Table",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "00:10:00",
+							"retry": 2,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": "SELECT\n\tprocedure_name\nFROM\n\t[config].[stored_procedures]\nWHERE\n\tprocedure_type = 'REPORTING FACT'\n\tAND is_active = 1",
+								"queryTimeout": "00:01:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_sqldb",
+								"type": "DatasetReference",
+								"parameters": {
+									"p_SchemaName": "n/a",
+									"p_TableName": "n/a"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "For Each Procedure",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Get Config From Config Table",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Get Config From Config Table').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Execute Procedure",
+									"type": "SqlServerStoredProcedure",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "00:30:00",
+										"retry": 2,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"storedProcedureName": {
+											"value": "@item().procedure_name",
+											"type": "Expression"
+										}
+									},
+									"linkedServiceName": {
+										"referenceName": "ls_azure_sql_db",
+										"type": "LinkedServiceReference"
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"folder": {
+					"name": "Power BI Monitoring/Stored procedures"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-11-14T11:32:09Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_sqldb')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_azure_sql_db')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Power BI Monitoring Master Pipeline Function')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Load Reporting Dimensions Function",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "Load Power BI API Activity Events Function",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Load Graph API Users Function",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Load Power BI API Reports Function",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Load Graph API Groups Function",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Load Power BI API Workspaces Function",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "Load Reporting Dimensions Function",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Load Reporting Facts Function",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "Load Reporting Dimensions Function",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "Load Reporting Facts Function",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Load Graph API Users Function",
+						"type": "ExecutePipeline",
+						"dependsOn": [],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "Load Graph API Users Function",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Load Power BI API Activity Events Function",
+						"type": "ExecutePipeline",
+						"dependsOn": [],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "Load Power BI API Activity Events Function",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Load Power BI API Reports Function",
+						"type": "ExecutePipeline",
+						"dependsOn": [],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "Load Power BI API Reports Function",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Load Power BI API Workspaces Function",
+						"type": "ExecutePipeline",
+						"dependsOn": [],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "Load Power BI API Workspaces Function",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Load Graph API Groups Function",
+						"type": "ExecutePipeline",
+						"dependsOn": [],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "Load Graph API Groups Function",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"folder": {
+					"name": "Power BI Monitoring"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-11-14T11:32:11Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/pipelines/Load Reporting Dimensions Function')]",
+				"[concat(variables('factoryId'), '/pipelines/Load Reporting Facts Function')]",
+				"[concat(variables('factoryId'), '/pipelines/Load Graph API Users Function')]",
+				"[concat(variables('factoryId'), '/pipelines/Load Power BI API Activity Events Function')]",
+				"[concat(variables('factoryId'), '/pipelines/Load Power BI API Reports Function')]",
+				"[concat(variables('factoryId'), '/pipelines/Load Power BI API Workspaces Function')]",
+				"[concat(variables('factoryId'), '/pipelines/Load Graph API Groups Function')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Daily_Power_BI_Monitoring')]",
+			"type": "Microsoft.DataFactory/factories/triggers",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"runtimeState": "Started",
+				"pipelines": [
+					{
+						"pipelineReference": {
+							"referenceName": "Power BI Monitoring Master Pipeline Function",
+							"type": "PipelineReference"
+						},
+						"parameters": {}
+					}
+				],
+				"type": "ScheduleTrigger",
+				"typeProperties": {
+					"recurrence": {
+						"frequency": "Day",
+						"interval": 1,
+						"startTime": "2023-11-02T00:00:00",
+						"timeZone": "Central European Standard Time",
+						"schedule": {
+							"minutes": [
+								0
+							],
+							"hours": [
+								6
+							]
+						}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/pipelines/Power BI Monitoring Master Pipeline Function')]"
+			]
+		}
+	]
+}
