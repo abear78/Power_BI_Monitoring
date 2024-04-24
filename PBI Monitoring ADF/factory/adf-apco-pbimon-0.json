@@ -1,0 +1,9 @@
+{
+	"name": "adf-apco-pbimon-0",
+	"location": "eastus2",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "76482ba7-8b2f-453e-87ed-e8fb3c6c602b",
+		"tenantId": "2918ecfd-90a0-4f02-a2a9-ce18aff25489"
+	}
+}
