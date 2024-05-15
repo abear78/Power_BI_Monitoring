@@ -11,7 +11,7 @@
 			"location": {
 				"type": "AzureBlobStorageLocation",
 				"fileName": "activityevents.csv",
-				"folderPath": "activityevents/2024-04-30",
+				"folderPath": "activityevents/2024-05-15",
 				"container": "staging"
 			},
 			"columnDelimiter": ",",
